@@ -31,3 +31,5 @@ logs/
 # Temporary files
 *.tmp
 xcframework_*
+AUTOMATION.md
+QUICKSTART.md
