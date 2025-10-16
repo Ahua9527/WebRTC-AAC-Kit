@@ -13,17 +13,27 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-13
     timeout-minutes: 180
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.3'
+
       - name: Setup depot_tools
         run: |
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
           echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Verify Xcode and SDK
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks
 
       - name: Sync WebRTC source
         run: |
@@ -43,6 +53,14 @@ jobs:
       - name: Build XCFramework
         run: |
           export PATH="$PWD/depot_tools:$PATH"
+          # Set environment variables to avoid module map issues
+          export CXXFLAGS="-fno-modules -fno-objc-arc-errors"
+          export CFLAGS="-fno-modules"
+          # Use compatible iOS deployment targets for Xcode 15.3
+          export IOS_DEVICE_TARGET="13.0"
+          export IOS_SIM_TARGET="13.0"
+          export CATALYST_TARGET="14.0"
+          export MAC_TARGET="11.0"
           ./scripts/build_all_configs.sh
 
       - name: Create archive
