@@ -1,0 +1,33 @@
+# WebRTC source code (managed by gclient)
+src/
+
+# gclient generated files
+.gclient_entries
+.gclient_previous_sync_commits
+.gcs_entries
+
+# Build outputs
+*.xcframework
+*.zip
+out_*/
+*.dSYM/
+
+# depot_tools
+.cipd/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.tmp
+xcframework_*
