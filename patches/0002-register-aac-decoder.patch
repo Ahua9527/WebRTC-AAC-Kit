@@ -1,0 +1,26 @@
+diff --git a/api/audio_codecs/builtin_audio_decoder_factory.cc b/api/audio_codecs/builtin_audio_decoder_factory.cc
+index c8d5800587..78738b18ad 100644
+--- a/api/audio_codecs/builtin_audio_decoder_factory.cc
++++ b/api/audio_codecs/builtin_audio_decoder_factory.cc
+@@ -28,6 +28,10 @@
+ #include "api/audio_codecs/opus/audio_decoder_opus.h"  // nogncheck
+ #endif
+ 
++#if defined(WEBRTC_USE_APPLE_AAC) && defined(WEBRTC_IOS)
++#include "api/audio_codecs/aac/audio_decoder_aac.h"  // nogncheck
++#endif
++
+ namespace webrtc {
+ 
+ namespace {
+@@ -59,6 +63,10 @@ scoped_refptr<AudioDecoderFactory> CreateBuiltinAudioDecoderFactory() {
+       AudioDecoderOpus, NotAdvertised<AudioDecoderMultiChannelOpus>,
+ #endif
+ 
++#if defined(WEBRTC_USE_APPLE_AAC) && defined(WEBRTC_IOS)
++      AacAudioDecoderFactory,
++#endif
++
+       AudioDecoderG722, AudioDecoderG711, NotAdvertised<AudioDecoderL16>>();
+ }
+ 

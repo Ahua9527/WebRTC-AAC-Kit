@@ -1,6 +1,6 @@
 # WebRTC AAC Kit
 
-WebRTC AAC Kit 为原生 WebRTC iOS 框架提供生产就绪的 AAC (RFC 3640) 解码器，打包为支持设备 (arm64) 和模拟器 (x86_64) 的 XCFramework。该 Kit 与上游 WebRTC 保持版本同步，同时扩展标准的 `mpeg4-generic` 音频载荷支持。
+WebRTC AAC Kit 为原生 WebRTC iOS 框架提供生产就绪的 AAC (RFC 3640) 解码器，打包为支持设备 (arm64)的 XCFramework。该 Kit 与上游 WebRTC 保持版本同步，同时扩展标准的 `mpeg4-generic` 音频载荷支持。
 
 ## 功能特性
 - 完整的 RFC 3640 AU 头部解析，支持可配置的 `sizelength` / `indexlength` / `indexdeltalength` 处理
@@ -20,36 +20,6 @@ WebRTC AAC Kit 为原生 WebRTC iOS 框架提供生产就绪的 AAC (RFC 3640) �
 # 环境设置
 cd /Users/professional/Dev/WebRTC-AAC-Kit/src
 export PATH="/Users/professional/depot_tools:$PATH"
-
-# 设备构建 (arm64)
-./buildtools/mac/gn gen out_ios_arm64 --args='
-is_debug=false
-target_os="ios"
-target_cpu="arm64"
-target_environment="device"
-ios_deployment_target="13.0"
-ios_enable_code_signing=false
-use_lld=true
-enable_dsyms=true
-symbol_level=1
-rtc_include_tests=false
-'
-ninja -C out_ios_arm64 framework_objc
-
-# 模拟器构建 (x86_64)
-./buildtools/mac/gn gen out_ios_x64_sim --args='
-is_debug=false
-target_os="ios"
-target_cpu="x64"
-target_environment="simulator"
-ios_deployment_target="13.0"
-ios_enable_code_signing=false
-use_lld=true
-enable_dsyms=true
-symbol_level=1
-rtc_include_tests=false
-'
-ninja -C out_ios_x64_sim framework_objc
 
 # 打包 XCFramework（从仓库根目录运行）
 cd /Users/professional/Dev/WebRTC-AAC-Kit
@@ -71,29 +41,51 @@ scripts/build_all_configs.sh
 - 脚本假设 `gn`、`ninja`、`xcodebuild` 和 `lipo` 在 `PATH` 中可用；确保事先配置好 `depot_tools`
 - 每个构建目录（`src/out_*`）都会重新生成；重用它们以加速增量重建
 
-## 使用 XCFramework
+## 安装方式
 
-### Xcode 项目
-1. 将 `src/WebRTC.xcframework` 拖入您的项目并启用 *Embed & Sign*
-2. 链接 `WebRTC.framework` 并导入 `<WebRTC/WebRTC.h>`（Obj-C）或 `import WebRTC`（Swift）
+### Swift Package Manager（推荐）
 
-### Swift Package Manager
+**在 Xcode 中添加依赖：**
+
+1. 打开你的 Xcode 项目
+2. 选择 **File → Add Package Dependencies...**
+3. 输入仓库 URL：
+   ```
+   https://github.com/Ahua9527/WebRTC-AAC-Kit.git
+   ```
+4. 选择版本规则（推荐：**Up to Next Major**）
+5. 点击 **Add Package**
+
+**在 Package.swift 中声明：**
+
 ```swift
-.binaryTarget(
-    name: "WebRTC",
-    path: "./src/WebRTC.xcframework"
-)
+dependencies: [
+    .package(url: "https://github.com/Ahua9527/WebRTC-AAC-Kit.git", from: "M142.0.0")
+]
 ```
 
-### CocoaPods（私有规范示例）
+**使用框架：**
+
+```swift
+import WebRTC
+
+// 创建 PeerConnectionFactory
+let factory = RTCPeerConnectionFactory()
+
+// AAC 解码器已自动注册，无需额外配置
+```
+
+### 手动集成
+
+1. 从 [Releases](https://github.com/Ahua9527/WebRTC-AAC-Kit/releases) 下载最新的 `WebRTC-M*.xcframework.zip`
+2. 解压并将 `WebRTC.xcframework` 拖入 Xcode 项目
+3. 在 Target 设置中选择 **Embed & Sign**
+4. 导入使用：`import WebRTC`（Swift）或 `#import <WebRTC/WebRTC.h>`（Objective-C）
+
+### CocoaPods
+
 ```ruby
-Pod::Spec.new do |s|
-  s.name    = 'WebRTC-AAC'
-  s.version = '0.0.1'
-  s.summary = 'WebRTC framework with RFC 3640 AAC decoder support'
-  s.platform = :ios, '13.0'
-  s.vendored_frameworks = 'src/WebRTC.xcframework'
-end
+pod 'WebRTC-AAC', :git => 'https://github.com/Ahua9527/WebRTC-AAC-Kit.git', :tag => 'M142.0-aac'
 ```
 
 ## 运行时说明
@@ -113,13 +105,10 @@ nm src/WebRTC.xcframework/ios-arm64/WebRTC.framework/WebRTC | grep AudioDecoderA
 
 # 检查目标架构
 lipo -info src/WebRTC.xcframework/ios-arm64/WebRTC.framework/WebRTC
-lipo -info src/WebRTC.xcframework/ios-x86_64-simulator/WebRTC.framework/WebRTC
 ```
 
 ## 延伸阅读
 - `WebRTC-AAC-Kit Technical Documentation.md` – Framework 完整技术规范（1,510行）
-- `WebRTC-AAC-Support-for-MediaMTX.md` – 服务器端（MediaMTX）集成指南
-- `CLAUDE.md` – 开发者指引（Claude Code 专用）
 
 ## 许可证
 所有修改遵循上游 WebRTC BSD 许可证；许可证和专利文本请参考原始 WebRTC 仓库。

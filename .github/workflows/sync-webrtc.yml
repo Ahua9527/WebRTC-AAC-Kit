@@ -1,0 +1,123 @@
+name: Sync WebRTC Milestone
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: 'Target Milestone (e.g., M143)'
+        required: false
+
+jobs:
+  check-milestone:
+    runs-on: ubuntu-latest
+    outputs:
+      has_update: ${{ steps.check.outputs.has_update }}
+      new_milestone: ${{ steps.check.outputs.new_milestone }}
+      current_milestone: ${{ steps.check.outputs.current_milestone }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Sync WebRTC
+        run: gclient sync --force
+
+      - name: Check milestone
+        id: check
+        run: |
+          # Get current milestone from patches/README.md
+          CURRENT=$(grep "基于 WebRTC" patches/README.md | grep -oE 'M[0-9]+' || echo "M142")
+
+          # Get latest milestone from WebRTC source
+          LATEST=$(./scripts/detect_milestone.sh)
+
+          echo "current_milestone=$CURRENT" >> $GITHUB_OUTPUT
+          echo "new_milestone=$LATEST" >> $GITHUB_OUTPUT
+
+          if [[ "$CURRENT" != "$LATEST" ]]; then
+            echo "has_update=true" >> $GITHUB_OUTPUT
+            echo "New milestone available: $LATEST (current: $CURRENT)"
+          else
+            echo "has_update=false" >> $GITHUB_OUTPUT
+            echo "Already on latest milestone: $CURRENT"
+          fi
+
+  create-sync-pr:
+    needs: check-milestone
+    if: needs.check-milestone.outputs.has_update == 'true'
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Sync and apply patches
+        run: |
+          ./scripts/sync_webrtc.sh
+          ./scripts/apply_patches.sh
+
+      - name: Test build
+        id: test
+        continue-on-error: true
+        run: |
+          export PATH="$PWD/depot_tools:$PATH"
+          ./scripts/build_all_configs.sh
+
+      - name: Create PR or Issue
+        uses: peter-evans/create-pull-request@v5
+        if: steps.test.outcome == 'success'
+        with:
+          commit-message: |
+            Sync to WebRTC ${{ needs.check-milestone.outputs.new_milestone }}
+
+            Automated sync from ${{ needs.check-milestone.outputs.current_milestone }}
+            to ${{ needs.check-milestone.outputs.new_milestone }}
+          branch: sync/${{ needs.check-milestone.outputs.new_milestone }}
+          title: 'Sync to WebRTC ${{ needs.check-milestone.outputs.new_milestone }}'
+          body: |
+            ## WebRTC Milestone Update
+
+            This PR updates the WebRTC source from **${{ needs.check-milestone.outputs.current_milestone }}**
+            to **${{ needs.check-milestone.outputs.new_milestone }}**.
+
+            ### Changes
+            - WebRTC source synchronized to latest milestone
+            - AAC patches re-applied successfully
+            - Test build completed ✓
+
+            ### Next Steps
+            1. Review changes
+            2. Merge this PR
+            3. Create a new release tag: `${{ needs.check-milestone.outputs.new_milestone }}.0-aac`
+
+      - name: Create Issue for failed build
+        uses: peter-evans/create-or-update-comment@v3
+        if: steps.test.outcome == 'failure'
+        with:
+          issue-number: ${{ github.event.issue.number || 0 }}
+          body: |
+            ## WebRTC Sync Failed
+
+            Automatic sync to **${{ needs.check-milestone.outputs.new_milestone }}** failed.
+
+            The build encountered errors after applying AAC patches.
+            Manual intervention required to resolve conflicts.
+
+            ### Action Required
+            1. Checkout sync branch
+            2. Resolve patch conflicts
+            3. Update patches if needed
+            4. Re-run build

@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'M*-aac'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-xcframework.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: xcframework-${{ needs.build.outputs.milestone }}
+          path: ./artifacts
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          MILESTONE="${{ needs.build.outputs.milestone }}"
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # Generate changelog
+          cat > CHANGELOG.md <<EOF
+          # Release $TAG
+
+          ## WebRTC Milestone
+          Based on **$MILESTONE**
+
+          ## Changes
+          EOF
+
+          if [[ -n "$PREV_TAG" ]]; then
+            echo "### Commits since $PREV_TAG" >> CHANGELOG.md
+            git log --oneline "$PREV_TAG..HEAD" >> CHANGELOG.md
+          else
+            echo "Initial release" >> CHANGELOG.md
+          fi
+
+          cat >> CHANGELOG.md <<EOF
+
+          ## Installation
+
+          ### Swift Package Manager
+          \`\`\`swift
+          .binaryTarget(
+              name: "WebRTC",
+              url: "https://github.com/${{ github.repository }}/releases/download/$TAG/${{ needs.build.outputs.archive }}",
+              checksum: "${{ needs.build.outputs.checksum }}"
+          )
+          \`\`\`
+
+          ### Manual Integration
+          1. Download \`${{ needs.build.outputs.archive }}\`
+          2. Unzip and drag \`WebRTC.xcframework\` into your Xcode project
+          3. Embed & Sign in your target settings
+
+          ## Checksum
+          \`\`\`
+          ${{ needs.build.outputs.checksum }}
+          \`\`\`
+
+          ---
+          Generated with [WebRTC AAC Kit](https://github.com/${{ github.repository }})
+          EOF
+
+          echo "Generated CHANGELOG.md"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/${{ needs.build.outputs.archive }}
+          body_path: CHANGELOG.md
+          name: ${{ needs.build.outputs.version }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Package.swift
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          CHECKSUM="${{ needs.build.outputs.checksum }}"
+          ARCHIVE="${{ needs.build.outputs.archive }}"
+          REPO="${{ github.repository }}"
+
+          if [[ ! -f Package.swift ]]; then
+            echo "Package.swift not found, skipping update"
+            exit 0
+          fi
+
+          echo "Updating Package.swift with new release info..."
+
+          # Update URL and checksum in Package.swift
+          sed -i.bak \
+            -e "s|url: \"https://github.com/.*/releases/download/[^\"]*\"|url: \"https://github.com/${REPO}/releases/download/${TAG}/${ARCHIVE}\"|" \
+            -e "s|checksum: \"[^\"]*\"|checksum: \"${CHECKSUM}\"|" \
+            Package.swift
+
+          rm -f Package.swift.bak
+
+          # Verify changes
+          echo "Updated Package.swift:"
+          grep -A 2 "binaryTarget" Package.swift
+
+      - name: Commit and push Package.swift update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet Package.swift; then
+            echo "No changes to Package.swift"
+            exit 0
+          fi
+
+          git add Package.swift
+          git commit -m "chore: update Package.swift for ${GITHUB_REF#refs/tags/}
+
+          - Update XCFramework URL
+          - Update checksum: ${{ needs.build.outputs.checksum }}"
+
+          git push origin HEAD:main

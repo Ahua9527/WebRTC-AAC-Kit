@@ -1,0 +1,94 @@
+diff --git a/api/audio_codecs/aac/audio_decoder_aac.h b/api/audio_codecs/aac/audio_decoder_aac.h
+new file mode 100644
+index 0000000000..00ea528bb6
+--- /dev/null
++++ b/api/audio_codecs/aac/audio_decoder_aac.h
+@@ -0,0 +1,88 @@
++/*
++ *  Copyright (c) 2024 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ */
++
++#ifndef API_AUDIO_CODECS_AAC_AUDIO_DECODER_AAC_H_
++#define API_AUDIO_CODECS_AAC_AUDIO_DECODER_AAC_H_
++
++#include <memory>
++#include <optional>
++#include <vector>
++
++#include "api/audio_codecs/audio_codec_pair_id.h"
++#include "api/audio_codecs/audio_decoder.h"
++#include "api/audio_codecs/audio_decoder_factory.h"
++#include "api/audio_codecs/audio_format.h"
++#include "api/field_trials_view.h"
++#include "api/scoped_refptr.h"
++#include "rtc_base/system/rtc_export.h"
++
++namespace webrtc {
++
++// AAC decoder API for use as a template parameter to
++// CreateAudioDecoderFactory<...>().
++struct RTC_EXPORT AacAudioDecoderFactory {
++  struct Config {
++    bool IsOk() const {
++      return (object_type >= 1 && object_type <= 39) &&
++             (sample_rate >= 8000 && sample_rate <= 96000) &&
++             (channels >= 1 && channels <= 8);
++    }
++
++    // AAC object type (1=AAC Main, 2=AAC LC, 3=AAC SSR, 4=AAC LTP, 23=HE-AAC, 39=HE-AAC v2)
++    uint8_t object_type = 2;  // Default to AAC LC
++
++    // Sample rate in Hz
++    uint32_t sample_rate = 44100;  // Default to 44.1kHz
++
++    // Number of audio channels
++    uint8_t channels = 1;  // Default to mono
++
++    // AU header configuration for RFC 3640
++    uint16_t size_length = 13;       // Standard size length
++    uint16_t index_length = 3;       // Standard index length
++    uint16_t index_delta_length = 3; // Standard index delta length
++    uint16_t cts_delta_length = 0;
++    uint16_t dts_delta_length = 0;
++    bool random_access_indication = false;
++    bool stream_state_indication = false;
++    uint16_t auxiliary_data_size_length = 0;
++
++    // AudioSpecificConfig in hex string (optional)
++    std::string config_hex;
++    std::vector<uint8_t> audio_specific_config;
++
++    uint32_t core_sample_rate = 0;
++    uint32_t extension_sample_rate = 0;
++    uint8_t extension_object_type = 0;
++    bool sbr_present = false;
++    bool ps_present = false;
++
++    // Enable frame size detection
++    bool enable_frame_detection = true;
++
++    // Enable error concealment
++    bool enable_error_concealment = true;
++  };
++
++  static std::optional<Config> SdpToConfig(const SdpAudioFormat& audio_format);
++  static void AppendSupportedDecoders(std::vector<AudioCodecSpec>* specs);
++  static std::unique_ptr<AudioDecoder> MakeAudioDecoder(
++      const Config& config,
++      std::optional<AudioCodecPairId> codec_pair_id = std::nullopt,
++      const FieldTrialsView* field_trials = nullptr);
++};
++
++// Helper function to create AAC decoder factory for inclusion in
++// builtin audio decoder factory
++webrtc::scoped_refptr<AudioDecoderFactory> CreateAacAudioDecoderFactory();
++
++}  // namespace webrtc
++
++#endif  // API_AUDIO_CODECS_AAC_AUDIO_DECODER_AAC_H_

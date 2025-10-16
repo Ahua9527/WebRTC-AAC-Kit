@@ -1,0 +1,45 @@
+diff --git a/api/audio_codecs/BUILD.gn b/api/audio_codecs/BUILD.gn
+index 25ea12557b..988ae80a1a 100644
+--- a/api/audio_codecs/BUILD.gn
++++ b/api/audio_codecs/BUILD.gn
+@@ -27,6 +27,7 @@ rtc_library("audio_codecs_api") {
+     "audio_encoder_factory_template.h",
+     "audio_format.cc",
+     "audio_format.h",
++    "audio_decoder_factory_template.h",
+   ]
+   deps = [
+     "..:array_view",
+@@ -77,6 +78,13 @@ rtc_library("builtin_audio_decoder_factory") {
+   } else {
+     defines += [ "WEBRTC_USE_BUILTIN_OPUS=0" ]
+   }
++
++  if (is_ios) {
++    deps += [ "aac:aac_audio_decoder_factory" ]
++    defines += [ "WEBRTC_USE_APPLE_AAC=1" ]
++  } else {
++    defines += [ "WEBRTC_USE_APPLE_AAC=0" ]
++  }
+ }
+ 
+ rtc_library("builtin_audio_encoder_factory") {
+@@ -137,3 +145,18 @@ rtc_library("opus_audio_encoder_factory") {
+     "opus:audio_encoder_opus",
+   ]
+ }
++
++# Export field_trials_view for other modules
++group("field_trials_view") {
++  public_deps = [ "..:field_trials_view" ]
++}
++
++# Export field_trials for other modules
++group("field_trials") {
++  public_deps = [ "..:field_trials" ]
++}
++
++# Export audio_decoder_factory_template for other modules
++group("audio_decoder_factory_template") {
++  public_deps = [ ":audio_codecs_api" ]
++}

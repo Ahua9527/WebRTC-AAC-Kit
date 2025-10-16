@@ -1,0 +1,82 @@
+name: Build XCFramework
+
+on:
+  push:
+    tags:
+      - 'M*-aac'
+  workflow_dispatch:
+    inputs:
+      milestone:
+        description: 'WebRTC Milestone (e.g., M143)'
+        required: false
+        default: 'current'
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          echo "$PWD/depot_tools" >> $GITHUB_PATH
+
+      - name: Sync WebRTC source
+        run: |
+          gclient sync --force
+
+      - name: Apply AAC patches
+        run: |
+          ./scripts/apply_patches.sh
+
+      - name: Detect Milestone
+        id: milestone
+        run: |
+          MILESTONE=$(./scripts/detect_milestone.sh)
+          echo "milestone=$MILESTONE" >> $GITHUB_OUTPUT
+          echo "Detected Milestone: $MILESTONE"
+
+      - name: Build XCFramework
+        run: |
+          export PATH="$PWD/depot_tools:$PATH"
+          ./scripts/build_all_configs.sh
+
+      - name: Create archive
+        id: archive
+        run: |
+          cd src
+          MILESTONE="${{ steps.milestone.outputs.milestone }}"
+          BUILD_NUM=$(git rev-list --count HEAD | tail -c 4)
+          VERSION="${MILESTONE}.${BUILD_NUM}-aac"
+          ARCHIVE_NAME="WebRTC-${VERSION}.xcframework.zip"
+
+          ditto -c -k --sequesterRsrc --keepParent WebRTC.xcframework "$ARCHIVE_NAME"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "archive=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+          echo "path=src/$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Calculate checksum
+        id: checksum
+        run: |
+          cd src
+          CHECKSUM=$(swift package compute-checksum "${{ steps.archive.outputs.archive }}")
+          echo "checksum=$CHECKSUM" >> $GITHUB_OUTPUT
+          echo "Checksum: $CHECKSUM"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcframework-${{ steps.milestone.outputs.milestone }}
+          path: ${{ steps.archive.outputs.path }}
+          retention-days: 30
+
+    outputs:
+      version: ${{ steps.archive.outputs.version }}
+      archive: ${{ steps.archive.outputs.archive }}
+      checksum: ${{ steps.checksum.outputs.checksum }}
+      milestone: ${{ steps.milestone.outputs.milestone }}
