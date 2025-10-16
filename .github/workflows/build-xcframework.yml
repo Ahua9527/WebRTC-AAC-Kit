@@ -13,7 +13,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-14
     timeout-minutes: 180
 
     steps:
@@ -21,10 +21,34 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Xcode
+        env:
+          IOS_SDK_VERSION: "17.6"
         run: |
-          # Switch to Xcode 15.2
-          sudo xcode-select -switch /Applications/Xcode_15.2.app
-          echo "DEVELOPER_DIR=/Applications/Xcode_15.2.app/Contents/Developer" >> $GITHUB_ENV
+          set -euo pipefail
+
+          SDK_NAME="iphoneos${IOS_SDK_VERSION}"
+          echo "Searching for Xcode bundle that provides ${SDK_NAME}"
+
+          FOUND_XCODE=""
+          for XCODE_APP in /Applications/Xcode_*.app /Applications/Xcode.app; do
+            [[ -d "$XCODE_APP" ]] || continue
+            DEVELOPER_DIR="$XCODE_APP/Contents/Developer"
+            if DEVELOPER_DIR="$DEVELOPER_DIR" xcodebuild -sdk "$SDK_NAME" -version >/dev/null 2>&1; then
+              FOUND_XCODE="$XCODE_APP"
+              break
+            fi
+          done
+
+          if [[ -z "$FOUND_XCODE" ]]; then
+            echo "::error::Unable to locate iOS SDK ${SDK_NAME} on this runner."
+            xcodebuild -showsdks || true
+            exit 1
+          fi
+
+          echo "Using $(basename "$FOUND_XCODE") for ${SDK_NAME}"
+          sudo xcode-select -switch "$FOUND_XCODE"
+          echo "IOS_SDK_VERSION=${IOS_SDK_VERSION}" >> "$GITHUB_ENV"
+          echo "DEVELOPER_DIR=${FOUND_XCODE}/Contents/Developer" >> "$GITHUB_ENV"
 
       - name: Setup depot_tools
         run: |
@@ -37,6 +61,8 @@ jobs:
           xcodebuild -version
           echo "Available SDKs:"
           xcodebuild -showsdks
+          echo "Active iOS SDK (${IOS_SDK_VERSION}):"
+          xcodebuild -sdk "iphoneos${IOS_SDK_VERSION}" -version
           echo "Developer directory:"
           echo $DEVELOPER_DIR
 
@@ -61,7 +87,7 @@ jobs:
           # Set environment variables to avoid module map issues
           export CXXFLAGS="-fno-modules -fno-objc-arc-errors"
           export CFLAGS="-fno-modules"
-          # Use compatible iOS deployment targets for Xcode 15.2
+          # Keep deployment targets compatible across all bundled platforms
           export IOS_DEVICE_TARGET="13.0"
           export IOS_SIM_TARGET="13.0"
           export CATALYST_TARGET="14.0"
